@@ -9,6 +9,8 @@ format: dart format .
 
 ## Architecture rules
 - Native public API must remain pure C extern "C" with primitive C-compatible types only.
+- C ABI facade rc_api.cpp must stay thin: validation and delegation only, no orchestration ownership.
+- Runtime must own server_session_, client_session_, discovery_responder_, and active session transports.
 - Dart FFI loader lives under lib/ffi and must choose library name/path by Platform.
 - Native build ownership remains in native/ with platform build files only wiring CMake target.
 - C++ shared library public declarations live in native/include/rc_api.h; implementation lives in native/src/rc_api.cpp.
@@ -33,6 +35,10 @@ format: dart format .
 ## Known patterns
 - Baseline app is a Flutter scaffold with a C++ shared library loaded through dart:ffi.
 - Native public API must remain pure C extern "C" with primitive C-compatible types only.
+- Transport scaffold includes ITransport, TcpTransport, TlsTransport with mbedTLS PSK, UDP discovery/responder, and NatTransport stub behind C ABI exports.
+- C ABI facade rc_api.cpp should remain thin validation/default-port/delegation only; Runtime owns sessions, discovery responder, and transport construction.
+- Runtime must retain active session transports, not just construct local TlsTransport objects.
+- rc_api.cpp should include only rc_api.h and rc_runtime.h for transport API delegation.
 - Dart FFI loader lives under lib/ffi and must choose library name/path by Platform.
 - Native build ownership remains in native/ with platform build files only wiring CMake target.
 - Verified commands: dart format ., flutter analyze, flutter build apk, flutter build windows, flutter test.
@@ -42,4 +48,6 @@ format: dart format .
 - flutter build linux is unsupported on the current Windows host.
 
 ## Changelog
+- 2026-05-12: Updated Runtime ownership and rc_api.cpp delegation/include patterns after orchestration refactor passed review.
+- 2026-05-12: Documented transport scaffold ownership rule after review found rc_api.cpp still owning orchestration.
 - 2026-05-11: Created AGENTS.md documenting Flutter/C++ FFI scaffold, native build ownership, and verified commands.
