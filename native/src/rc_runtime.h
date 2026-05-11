@@ -9,6 +9,10 @@ class TlsTransport;
 class UdpDiscoveryResponder;
 }
 
+namespace rc::capture {
+class ICapture;
+}
+
 namespace rc {
 
 class Runtime final {
@@ -25,11 +29,14 @@ class Runtime final {
                          const uint8_t* psk, uint32_t psk_length);
   int32_t start_discovery(uint16_t discovery_port, const char* device_name,
                           uint16_t tcp_port);
+  int32_t start_capture();
+  void stop_capture();
 
  private:
   std::unique_ptr<transport::TlsTransport> server_session_;
   std::unique_ptr<transport::TlsTransport> client_session_;
   std::unique_ptr<transport::UdpDiscoveryResponder> discovery_responder_;
+  std::unique_ptr<capture::ICapture> capture_;
 };
 
 Runtime& runtime();

@@ -1,5 +1,6 @@
 #include "rc_runtime.h"
 
+#include "capture_factory.h"
 #include "socket_platform.h"
 #include "tcp_transport.h"
 #include "tls_transport.h"
@@ -58,7 +59,20 @@ int32_t Runtime::connect_client(const char* ip_address, uint16_t port,
 int32_t Runtime::start_discovery(uint16_t discovery_port,
                                  const char* device_name, uint16_t tcp_port) {
   return discovery_responder_->start(discovery_port, device_name, tcp_port) ? 0
-                                                                           : -1;
+                                                                            : -1;
+}
+
+int32_t Runtime::start_capture() {
+  if (!capture_) {
+    capture_ = capture::create_platform_capture();
+  }
+  return capture_ && capture_->start() ? 0 : -1;
+}
+
+void Runtime::stop_capture() {
+  if (capture_) {
+    capture_->stop();
+  }
 }
 
 Runtime& runtime() {

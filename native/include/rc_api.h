@@ -23,6 +23,8 @@ RC_API int32_t rc_server_start(uint16_t port, const uint8_t* psk,
 RC_API int32_t rc_client_connect(const char* ip_address, uint16_t port,
                                  const uint8_t* psk, uint32_t psk_length);
 RC_API int32_t rc_discovery_start(uint16_t port, const char* device_name);
+RC_API int32_t rc_capture_start(void);
+RC_API int32_t rc_capture_stop(void);
 
 #ifdef __cplusplus
 }

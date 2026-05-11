@@ -43,3 +43,12 @@ extern "C" int32_t rc_discovery_start(uint16_t port, const char* device_name) {
   return rc::runtime().start_discovery(discovery_port, device_name,
                                        kDefaultTcpPort);
 }
+
+extern "C" int32_t rc_capture_start(void) {
+  return rc::runtime().start_capture();
+}
+
+extern "C" int32_t rc_capture_stop(void) {
+  rc::runtime().stop_capture();
+  return 0;
+}
