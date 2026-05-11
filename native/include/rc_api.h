@@ -18,13 +18,20 @@ extern "C" {
 #endif
 
 RC_API int32_t rc_native_abi_version(void);
+RC_API int32_t rc_initialize_dart_api(void* initialize_api_data);
 RC_API int32_t rc_server_start(uint16_t port, const uint8_t* psk,
                                uint32_t psk_length);
 RC_API int32_t rc_client_connect(const char* ip_address, uint16_t port,
                                  const uint8_t* psk, uint32_t psk_length);
+RC_API int32_t rc_client_disconnect(void);
 RC_API int32_t rc_discovery_start(uint16_t port, const char* device_name);
 RC_API int32_t rc_capture_start(void);
 RC_API int32_t rc_capture_stop(void);
+RC_API int32_t rc_frame_stream_start(int64_t native_port);
+RC_API int32_t rc_frame_stream_stop(void);
+RC_API int32_t rc_send_mouse_move(double x, double y);
+RC_API int32_t rc_send_mouse_down(double x, double y, int32_t button);
+RC_API int32_t rc_send_mouse_up(double x, double y, int32_t button);
 
 #ifdef __cplusplus
 }

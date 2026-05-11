@@ -12,6 +12,7 @@ format: dart format .
 - C ABI facade rc_api.cpp must stay thin: validation and delegation only, no orchestration ownership.
 - Runtime must own server_session_, client_session_, discovery_responder_, active session transports, and capture_.
 - Dart FFI loader lives under lib/ffi and must choose library name/path by Platform.
+- NativePort frame streams must initialize Dart DL before starting frame delivery.
 - Native build ownership remains in native/ with platform build files only wiring CMake target.
 - C++ shared library public declarations live in native/include/rc_api.h; implementation lives in native/src/rc_api.cpp.
 - CMake target rc_native is integrated through Android, Linux, and Windows platform build files.
@@ -47,6 +48,9 @@ format: dart format .
 - Codec layer is isolated from transport and Runtime ownership.
 - H264/OpenH264/libyuv wiring currently lives in native/CMakeLists.txt and may need extraction if dependency setup grows.
 - Android CMake cache may require flutter clean when toggling RC_NATIVE_ENABLE_CODEC.
+- NativePort frame delivery must initialize Dart DL via rc_initialize_dart_api(NativeApi.initializeApiDLData) before rc_frame_stream_start.
+- HomeScreen must not own connection history persistence; use the ConnectionHistory service.
+- RcBridge/Runtime are growing seams and should be split if more FFI domains are added.
 - Verified commands: dart format ., flutter analyze, flutter build windows, flutter clean && flutter build apk, flutter test.
 
 ## Blocked items
@@ -54,6 +58,7 @@ format: dart format .
 - flutter build linux is unsupported on the current Windows host.
 
 ## Changelog
+- 2026-05-12: Documented Flutter UI-to-native FFI bridge, NativePort frame stream initialization, connection history ownership, and bridge/runtime seam warning.
 - 2026-05-12: Documented step 2 codec abstraction, H264 dependency wiring, and Android codec cache-clean note.
 - 2026-05-12: Documented step 1 capture scaffold ownership and platform file selection after Windows DXGI/stub capture implementation.
 - 2026-05-12: Updated Runtime ownership and rc_api.cpp delegation/include patterns after orchestration refactor passed review.
