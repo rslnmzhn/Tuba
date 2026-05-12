@@ -40,6 +40,11 @@ if(NOT EXISTS "${RC_DART_SDK_INCLUDE}/dart_api_dl.h")
   message(FATAL_ERROR "Dart DL API header not found at ${RC_DART_SDK_INCLUDE}/dart_api_dl.h")
 endif()
 
+set(RC_DART_API_DL_SOURCE "${RC_DART_SDK_INCLUDE}/dart_api_dl.c")
+if(NOT EXISTS "${RC_DART_API_DL_SOURCE}")
+  message(FATAL_ERROR "Dart DL API source not found at ${RC_DART_API_DL_SOURCE}")
+endif()
+
 if(RC_NATIVE_USE_SYSTEM_MBEDTLS)
   find_package(MbedTLS REQUIRED)
 else()
@@ -115,6 +120,7 @@ endif()
 add_library(rc_native SHARED
   src/approval_protocol.cpp
   src/dart_port_events.cpp
+  "${RC_DART_API_DL_SOURCE}"
   src/rc_api.cpp
   src/rc_runtime.cpp
   src/socket_platform.cpp
@@ -123,6 +129,18 @@ add_library(rc_native SHARED
   src/udp_discovery.cpp
   src/udp_discovery_responder.cpp
 )
+
+if(MSVC)
+  set_source_files_properties(
+    "${RC_DART_API_DL_SOURCE}"
+    PROPERTIES COMPILE_OPTIONS "/wd4100;/wd4152"
+  )
+else()
+  set_source_files_properties(
+    "${RC_DART_API_DL_SOURCE}"
+    PROPERTIES COMPILE_OPTIONS "-Wno-unused-parameter"
+  )
+endif()
 
 if(RC_NATIVE_ENABLE_CODEC)
   target_sources(rc_native PRIVATE src/h264_encoder.cpp)

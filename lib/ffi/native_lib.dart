@@ -12,7 +12,7 @@ final class NativeLib {
     }
 
     if (Platform.isLinux) {
-      return DynamicLibrary.open(_desktopLibraryPath('librc_native.so'));
+      return DynamicLibrary.open(_linuxLibraryPath('librc_native.so'));
     }
 
     if (Platform.isWindows) {
@@ -33,5 +33,23 @@ final class NativeLib {
     }
 
     return File.fromUri(executableDirectory.uri.resolve(libraryName)).path;
+  }
+
+  static String _linuxLibraryPath(String libraryName) {
+    final executableDirectory = File(Platform.resolvedExecutable).parent;
+    final candidates = <File>[
+      File.fromUri(executableDirectory.uri.resolve('lib/$libraryName')),
+      File.fromUri(executableDirectory.uri.resolve(libraryName)),
+      File.fromUri(Directory.current.uri.resolve('lib/$libraryName')),
+      File.fromUri(Directory.current.uri.resolve(libraryName)),
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate.existsSync()) {
+        return candidate.path;
+      }
+    }
+
+    return candidates.first.path;
   }
 }
