@@ -88,6 +88,11 @@ final class RcBridge {
           Int32 Function(Uint16, Pointer<Uint8>, Uint32),
           int Function(int, Pointer<Uint8>, int)
         >('rc_server_start');
+    _serverStartAsync = _library
+        .lookupFunction<
+          Int32 Function(Uint16, Pointer<Uint8>, Uint32),
+          int Function(int, Pointer<Uint8>, int)
+        >('rc_server_start_async');
     _serverSetApprovalPort = _library
         .lookupFunction<Int32 Function(Int64), int Function(int)>(
           'rc_server_set_approval_port',
@@ -154,6 +159,7 @@ final class RcBridge {
   _clientConnectNamed;
   late final int Function() _clientDisconnect;
   late final int Function(int, Pointer<Uint8>, int) _serverStart;
+  late final int Function(int, Pointer<Uint8>, int) _serverStartAsync;
   late final int Function(int) _serverSetApprovalPort;
   late final int Function(int) _serverApprovePending;
   late final int Function(int) _serverRejectPending;
@@ -210,12 +216,23 @@ final class RcBridge {
   }
 
   int startServer({int port = 0}) {
+    return _startServerWith(_serverStart, port: port);
+  }
+
+  int startServerAsync({int port = 0}) {
+    return _startServerWith(_serverStartAsync, port: port);
+  }
+
+  int _startServerWith(
+    int Function(int, Pointer<Uint8>, int) start, {
+    required int port,
+  }) {
     final psk = calloc<Uint8>(_defaultPsk.length);
     try {
       for (var index = 0; index < _defaultPsk.length; index += 1) {
         psk[index] = _defaultPsk[index];
       }
-      return _serverStart(port, psk, _defaultPsk.length);
+      return start(port, psk, _defaultPsk.length);
     } finally {
       calloc.free(psk);
     }

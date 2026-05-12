@@ -53,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startNativeServices() {
     _bridge.startApprovalListener();
+    _bridge.startServerAsync();
     _bridge.startDiscoveryResponder(deviceName: 'Tuba');
     _deviceSubscription = _discoveredDevices.stream.listen(_handleDevices);
     _approvalSubscription = _bridge.approvalRequests.listen(

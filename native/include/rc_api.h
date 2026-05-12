@@ -21,6 +21,8 @@ RC_API int32_t rc_native_abi_version(void);
 RC_API int32_t rc_initialize_dart_api(void* initialize_api_data);
 RC_API int32_t rc_server_start(uint16_t port, const uint8_t* psk,
                                uint32_t psk_length);
+RC_API int32_t rc_server_start_async(uint16_t port, const uint8_t* psk,
+                                     uint32_t psk_length);
 RC_API int32_t rc_server_set_approval_port(int64_t native_port);
 RC_API int32_t rc_server_approve_pending(int32_t request_id);
 RC_API int32_t rc_server_reject_pending(int32_t request_id);

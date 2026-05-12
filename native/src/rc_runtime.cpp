@@ -83,7 +83,9 @@ Runtime::Runtime()
     : discovery_responder_(
           std::make_unique<transport::UdpDiscoveryResponder>()) {}
 
-Runtime::~Runtime() = default;
+Runtime::~Runtime() {
+  stop_server_thread();
+}
 
 int32_t Runtime::initialize_dart_api(void* initialize_api_data) {
   return initialize_dart_api_dl(initialize_api_data);
@@ -97,9 +99,19 @@ int32_t Runtime::start_server(uint16_t port, const uint8_t* psk,
     set_last_error(transport::last_tcp_error());
     return -2;
   }
+  {
+    std::lock_guard<std::mutex> lock(server_listener_mutex_);
+    server_listener_ = listener;
+  }
 
   transport::TcpTransport accepted =
       transport::TcpTransport::accept_from(listener);
+  {
+    std::lock_guard<std::mutex> lock(server_listener_mutex_);
+    if (server_listener_ == listener) {
+      server_listener_ = kInvalidSocket;
+    }
+  }
   transport::close_socket(listener);
   if (accepted.socket_handle() == kInvalidSocket) {
     set_last_error(transport::last_tcp_error());
@@ -144,6 +156,28 @@ int32_t Runtime::start_server(uint16_t port, const uint8_t* psk,
   }
 
   server_session_ = std::move(session);
+  return 0;
+}
+
+int32_t Runtime::start_server_async(uint16_t port, const uint8_t* psk,
+                                    uint32_t psk_length) {
+  if (server_running_.exchange(true)) {
+    return 0;
+  }
+  if (server_thread_.joinable()) {
+    server_thread_.join();
+  }
+  std::vector<uint8_t> psk_copy(psk, psk + psk_length);
+  server_thread_ = std::thread([this, port, psk_copy = std::move(psk_copy)] {
+    while (server_running_.load()) {
+      const int32_t result = start_server(port, psk_copy.data(),
+                                          static_cast<uint32_t>(psk_copy.size()));
+      if (result == 0 || result == -2) {
+        break;
+      }
+    }
+    server_running_.store(false);
+  });
   return 0;
 }
 
@@ -358,6 +392,27 @@ int32_t Runtime::wait_for_approval(const std::string& device_name,
 void Runtime::set_last_error(std::string message) {
   std::lock_guard<std::mutex> lock(state_mutex_);
   last_error_ = std::move(message);
+}
+
+void Runtime::stop_server_thread() {
+  server_running_.store(false);
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (pending_request_id_ != 0) {
+      approval_decision_ = ApprovalDecision::kRejected;
+    }
+  }
+  approval_cv_.notify_all();
+  {
+    std::lock_guard<std::mutex> lock(server_listener_mutex_);
+    if (server_listener_ != kInvalidSocket) {
+      transport::close_socket(server_listener_);
+      server_listener_ = kInvalidSocket;
+    }
+  }
+  if (server_thread_.joinable()) {
+    server_thread_.join();
+  }
 }
 
 Runtime& runtime() {

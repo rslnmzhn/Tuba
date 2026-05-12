@@ -35,6 +35,15 @@ extern "C" int32_t rc_server_start(uint16_t port, const uint8_t* psk,
   return rc::runtime().start_server(listen_port, psk, psk_length);
 }
 
+extern "C" int32_t rc_server_start_async(uint16_t port, const uint8_t* psk,
+                                           uint32_t psk_length) {
+  if (!valid_psk(psk, psk_length)) {
+    return -1;
+  }
+  const uint16_t listen_port = port == 0U ? kDefaultTcpPort : port;
+  return rc::runtime().start_server_async(listen_port, psk, psk_length);
+}
+
 extern "C" int32_t rc_server_set_approval_port(int64_t native_port) {
   if (native_port == 0) {
     return -1;
