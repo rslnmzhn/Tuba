@@ -1,38 +1,35 @@
 #include "dart_port_events.h"
 
-#if __has_include("dart_api_dl.h")
-#include "dart_api_dl.h"
-#define RC_HAS_DART_API_DL 1
-#elif __has_include(<dart_api_dl.h>)
 #include <dart_api_dl.h>
-#define RC_HAS_DART_API_DL 1
-#else
-#define RC_HAS_DART_API_DL 0
-#endif
+
+#include <atomic>
 
 namespace rc {
+namespace {
+
+std::atomic_bool g_dart_api_initialized{false};
+
+}  // namespace
 
 bool dart_api_available() {
-#if RC_HAS_DART_API_DL
-  return true;
-#else
-  return false;
-#endif
+  return g_dart_api_initialized.load();
 }
 
 int32_t initialize_dart_api_dl(void* initialize_api_data) {
-#if RC_HAS_DART_API_DL
-  return Dart_InitializeApiDL(initialize_api_data) == 0 ? 0 : -1;
-#else
-  (void)initialize_api_data;
-  return -2;
-#endif
+  if (g_dart_api_initialized.load()) {
+    return 0;
+  }
+  const intptr_t result = Dart_InitializeApiDL(initialize_api_data);
+  if (result != 0) {
+    return -1;
+  }
+  g_dart_api_initialized.store(true);
+  return 0;
 }
 
 bool post_approval_request_to_dart(int64_t native_port, int32_t request_id,
                                    const std::string& device_name,
                                    const std::string& ip_address) {
-#if RC_HAS_DART_API_DL
   Dart_CObject type;
   type.type = Dart_CObject_kString;
   type.value.as_string = const_cast<char*>("approval_request");
@@ -51,18 +48,10 @@ bool post_approval_request_to_dart(int64_t native_port, int32_t request_id,
   message.value.as_array.length = 4;
   message.value.as_array.values = values;
   return Dart_PostCObject_DL(native_port, &message);
-#else
-  (void)native_port;
-  (void)request_id;
-  (void)device_name;
-  (void)ip_address;
-  return false;
-#endif
 }
 
 bool post_discovered_device_to_dart(int64_t native_port,
                                     const transport::DiscoveredDevice& device) {
-#if RC_HAS_DART_API_DL
   Dart_CObject type;
   type.type = Dart_CObject_kString;
   type.value.as_string = const_cast<char*>("device");
@@ -81,11 +70,6 @@ bool post_discovered_device_to_dart(int64_t native_port,
   message.value.as_array.length = 4;
   message.value.as_array.values = values;
   return Dart_PostCObject_DL(native_port, &message);
-#else
-  (void)native_port;
-  (void)device;
-  return false;
-#endif
 }
 
 }  // namespace rc

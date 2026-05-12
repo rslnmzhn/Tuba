@@ -189,12 +189,18 @@ final class RcBridge {
 
   int get abiVersion => _nativeAbiVersion();
 
+  bool _dartApiInitialized = false;
+
   int initializeDartApi() {
+    if (_dartApiInitialized) {
+      return 0;
+    }
     final result = _initializeDartApi(
       NativeApi.initializeApiDLData.cast<Void>(),
     );
-    if (result != 0) {
-      DebugLog.instance.add('rc_initialize_dart_api -> $result');
+    DebugLog.instance.add('rc_initialize_dart_api -> $result');
+    if (result == 0) {
+      _dartApiInitialized = true;
     }
     return result;
   }

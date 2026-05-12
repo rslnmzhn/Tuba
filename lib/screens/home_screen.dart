@@ -57,6 +57,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startNativeServices() {
     _debugLog.add('Starting native services');
+    final dartApiResult = _bridge.initializeDartApi();
+    if (dartApiResult != 0) {
+      _debugLog.add(
+        'Native services aborted: rc_initialize_dart_api failed -> '
+        '$dartApiResult',
+      );
+      Future<void>.delayed(Duration.zero, () {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Не удалось инициализировать Dart DL API: $dartApiResult. '
+              'Approval/discovery недоступны.',
+            ),
+          ),
+        );
+      });
+      return;
+    }
     final approvalResult = _bridge.startApprovalListener();
     _debugLog.add('startApprovalListener -> $approvalResult');
     if (approvalResult != 0) {

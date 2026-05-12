@@ -25,6 +25,21 @@ option(RC_NATIVE_ENABLE_CODEC "Build OpenH264/libyuv H264 encoder" ${RC_NATIVE_E
 set(ENABLE_TESTING OFF CACHE BOOL "Disable dependency tests" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(RC_FLUTTER_ROOT "")
+if(DEFINED FLUTTER_ROOT)
+  set(RC_FLUTTER_ROOT "${FLUTTER_ROOT}")
+elseif(DEFINED ENV{FLUTTER_ROOT})
+  file(TO_CMAKE_PATH "$ENV{FLUTTER_ROOT}" RC_FLUTTER_ROOT)
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../windows/flutter/ephemeral/generated_config.cmake")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../windows/flutter/ephemeral/generated_config.cmake")
+  set(RC_FLUTTER_ROOT "${FLUTTER_ROOT}")
+endif()
+
+set(RC_DART_SDK_INCLUDE "${RC_FLUTTER_ROOT}/bin/cache/dart-sdk/include")
+if(NOT EXISTS "${RC_DART_SDK_INCLUDE}/dart_api_dl.h")
+  message(FATAL_ERROR "Dart DL API header not found at ${RC_DART_SDK_INCLUDE}/dart_api_dl.h")
+endif()
+
 if(RC_NATIVE_USE_SYSTEM_MBEDTLS)
   find_package(MbedTLS REQUIRED)
 else()
@@ -129,7 +144,7 @@ target_include_directories(rc_native
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
   PRIVATE
-    "${FLUTTER_ROOT}/bin/cache/dart-sdk/include"
+    "${RC_DART_SDK_INCLUDE}"
 )
 
 target_compile_features(rc_native PRIVATE cxx_std_17)

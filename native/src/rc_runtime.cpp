@@ -14,15 +14,7 @@
 #include <utility>
 #include <vector>
 
-#if __has_include("dart_api_dl.h")
-#include "dart_api_dl.h"
-#define RC_HAS_DART_API_DL 1
-#elif __has_include(<dart_api_dl.h>)
 #include <dart_api_dl.h>
-#define RC_HAS_DART_API_DL 1
-#else
-#define RC_HAS_DART_API_DL 0
-#endif
 
 namespace rc {
 namespace {
@@ -33,7 +25,6 @@ constexpr auto kApprovalTimeout = std::chrono::seconds(60);
 constexpr char kApproved[] = "APPROVED";
 constexpr char kRejected[] = "REJECTED";
 
-#if RC_HAS_DART_API_DL
 void post_frame_to_dart(int64_t native_port,
                         const capture::FrameBuffer& frame) {
   if (frame.empty()) {
@@ -72,13 +63,6 @@ void post_frame_to_dart(int64_t native_port,
 
   Dart_PostCObject_DL(native_port, &message);
 }
-#else
-void post_frame_to_dart(int64_t native_port,
-                        const capture::FrameBuffer& frame) {
-  (void)native_port;
-  (void)frame;
-}
-#endif
 
 }  // namespace
 
