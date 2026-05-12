@@ -144,6 +144,11 @@ int32_t Runtime::start_server(uint16_t port, const uint8_t* psk,
     std::lock_guard<std::mutex> lock(state_mutex_);
     decision = approval_decision_;
   }
+  if (decision == ApprovalDecision::kUnavailable) {
+    send_protocol_message(*session, "UNAVAILABLE");
+    set_last_error("Approval UI is not available on host");
+    return -9;
+  }
   if (decision != ApprovalDecision::kApproved) {
     send_protocol_message(*session, kRejected);
     set_last_error("Connection request rejected");
@@ -245,6 +250,10 @@ int32_t Runtime::connect_client(const char* ip_address, uint16_t port,
   if (response == kRejected) {
     set_last_error("Host rejected connection");
     return -3;
+  }
+  if (response == "UNAVAILABLE") {
+    set_last_error("Host is reachable, but its approval UI is not available");
+    return -7;
   }
   if (response != kApproved) {
     set_last_error("Invalid approval response");
@@ -372,7 +381,7 @@ int32_t Runtime::wait_for_approval(const std::string& device_name,
   if (port == 0 || !post_approval_request_to_dart(port, request_id, device_name, ip_address)) {
     std::lock_guard<std::mutex> lock(state_mutex_);
     pending_request_id_ = 0;
-    approval_decision_ = ApprovalDecision::kRejected;
+    approval_decision_ = ApprovalDecision::kUnavailable;
     last_error_ = "Approval NativePort is not available";
     return request_id;
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -27,10 +28,9 @@ class _HomeScreenState extends State<HomeScreen> {
   late final DiscoveredDevices _discoveredDevices;
   RcBridge get _bridge => RcBridge.instance;
   List<String> _history = <String>[];
-  List<DiscoveredDevice> _devices = <DiscoveredDevice>[];
+  List<InternetAddress> _localAddresses = <InternetAddress>[];
   bool _connecting = false;
   bool _waitingForApproval = false;
-  StreamSubscription<List<DiscoveredDevice>>? _deviceSubscription;
   StreamSubscription<ApprovalRequest>? _approvalSubscription;
 
   @override
@@ -38,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _discoveredDevices = widget.discoveredDevices ?? DiscoveredDevices.instance;
     _loadHistory();
+    _loadLocalAddresses();
     if (widget.enableNativeServices) {
       _startNativeServices();
     }
@@ -45,30 +46,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _deviceSubscription?.cancel();
     _approvalSubscription?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   void _startNativeServices() {
-    _bridge.startApprovalListener();
-    _bridge.startServerAsync();
-    _bridge.startDiscoveryResponder(deviceName: 'Tuba');
-    _deviceSubscription = _discoveredDevices.stream.listen(_handleDevices);
+    final approvalResult = _bridge.startApprovalListener();
+    final serverResult = _bridge.startServerAsync();
+    final discoveryResult = _bridge.startDiscoveryResponder(deviceName: 'Tuba');
     _approvalSubscription = _bridge.approvalRequests.listen(
       _handleApprovalRequest,
     );
     Future<void>.delayed(Duration.zero, _refreshDevices);
+    Future<void>.delayed(Duration.zero, () {
+      if (!mounted) {
+        return;
+      }
+      _showNativeStartupDiagnostics(
+        approvalResult: approvalResult,
+        serverResult: serverResult,
+        discoveryResult: discoveryResult,
+      );
+    });
   }
 
-  void _handleDevices(List<DiscoveredDevice> devices) {
-    if (!mounted) {
+  void _showNativeStartupDiagnostics({
+    required int approvalResult,
+    required int serverResult,
+    required int discoveryResult,
+  }) {
+    final errors = <String>[];
+    if (approvalResult != 0) {
+      errors.add('approval listener: $approvalResult');
+    }
+    if (serverResult != 0) {
+      errors.add('TCP server: $serverResult');
+    }
+    if (discoveryResult != 0) {
+      errors.add('discovery: $discoveryResult');
+    }
+    if (errors.isEmpty) {
       return;
     }
-    setState(() {
-      _devices = devices;
-    });
+
+    final nativeError = _bridge.lastError();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Не удалось запустить сетевые службы (${errors.join(', ')}). '
+          '${_permissionHint(nativeError)}',
+        ),
+      ),
+    );
   }
 
   Future<void> _refreshDevices() async {
@@ -117,6 +147,23 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _loadLocalAddresses() async {
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: false,
+    );
+    final addresses = interfaces
+        .expand((interface) => interface.addresses)
+        .where((address) => !_isLinkLocalAddress(address.address))
+        .toList(growable: false);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _localAddresses = addresses;
+    });
+  }
+
   Future<void> _saveHistory(String ipAddress) async {
     final nextHistory = await _connectionHistory.remember(ipAddress);
     if (mounted) {
@@ -150,10 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     if (result != 0) {
-      final message = result == -3
-          ? 'Хост отклонил подключение'
-          : 'Не удалось подключиться: код $result ${_bridge.lastError()}'
-                .trim();
+      final message = _connectErrorMessage(result, _bridge.lastError());
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -171,6 +215,40 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  String _connectErrorMessage(int result, String nativeError) {
+    final details = nativeError.trim();
+    if (result == -3) {
+      return 'Хост отклонил подключение. Если на хосте не появился запрос, '
+          'проверьте, что Tuba запущена на хосте, порт 5900 не заблокирован '
+          'фаерволом/VPN и сетевые службы стартовали без ошибок.';
+    }
+    if (result == -7) {
+      return 'Хост доступен, но окно одобрения на нём недоступно. '
+          'Перезапустите Tuba на хосте; если Windows блокирует сеть, '
+          'разрешите приложение в фаерволе или запустите от имени администратора.';
+    }
+    final suffix = details.isEmpty ? '' : ': $details';
+    return 'Не удалось подключиться (код $result)$suffix. '
+        '${_permissionHint(details)}';
+  }
+
+  String _permissionHint(String nativeError) {
+    final lower = nativeError.toLowerCase();
+    final permissionRelated =
+        lower.contains('access denied') ||
+        lower.contains('permission') ||
+        lower.contains('отказано') ||
+        lower.contains('denied');
+    if (permissionRelated) {
+      return 'Похоже на запрет ОС/фаервола/VPN. Попробуйте разрешить Tuba в '
+          'фаерволе или запустить приложение от имени администратора.';
+    }
+    return 'Если Windows/фаервол блокирует порт, разрешите Tuba в сети или '
+        'запустите приложение от имени администратора.';
+  }
+
+  bool _isLinkLocalAddress(String address) => address.startsWith('169.254.');
 
   @override
   Widget build(BuildContext context) {
@@ -198,55 +276,108 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 132,
-                child: _devices.isEmpty
-                    ? const Card(
-                        child: Center(child: Text('Устройства не найдены')),
-                      )
-                    : ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _devices.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemBuilder: (context, index) {
-                          final device = _devices[index];
-                          return SizedBox(
-                            width: 220,
-                            child: Card(
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: _connecting
-                                    ? null
-                                    : () => _connect(device.ipAddress),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.devices),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        device.name.isEmpty
-                                            ? 'Tuba host'
-                                            : device.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
+              StreamBuilder<List<DiscoveredDevice>>(
+                stream: _discoveredDevices.stream,
+                initialData: _discoveredDevices.current,
+                builder: (context, snapshot) {
+                  final devices = snapshot.data ?? const <DiscoveredDevice>[];
+                  return SizedBox(
+                    height: 132,
+                    child: devices.isEmpty
+                        ? const Card(
+                            child: Center(child: Text('Устройства не найдены')),
+                          )
+                        : ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: devices.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              final device = devices[index];
+                              return SizedBox(
+                                width: 220,
+                                child: Card(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: _connecting
+                                        ? null
+                                        : () => _connect(device.ipAddress),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.devices),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            device.name.isEmpty
+                                                ? 'Tuba host'
+                                                : device.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleSmall,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(device.ipAddress),
+                                        ],
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(device.ipAddress),
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
+                              );
+                            },
+                          ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'IP этого устройства',
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
-                          );
-                        },
+                          ),
+                          IconButton(
+                            tooltip: 'Обновить IP',
+                            onPressed: _loadLocalAddresses,
+                            icon: const Icon(Icons.refresh),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 4),
+                      if (_localAddresses.isEmpty)
+                        const Text('IPv4 адреса не найдены')
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final address in _localAddresses)
+                              InputChip(
+                                avatar: const Icon(Icons.content_copy),
+                                label: Text(address.address),
+                                onPressed: () {
+                                  _controller.text = address.address;
+                                },
+                              ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               TextField(

@@ -58,7 +58,7 @@ class Runtime final {
   int32_t send_mouse_up(double x, double y, int32_t button);
 
  private:
-  enum class ApprovalDecision { kPending, kApproved, kRejected };
+  enum class ApprovalDecision { kPending, kApproved, kRejected, kUnavailable };
 
   int32_t wait_for_approval(const std::string& device_name,
                             const std::string& ip_address);
