@@ -176,6 +176,20 @@ jobs:
             exit 1
           fi
 
+      - name: Generate changelog
+        id: generate_changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          previous_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+
+          if [[ -z "$previous_tag" ]]; then
+            git log --pretty=format:"- %s (%h)" > release-notes.md
+          else
+            git log "${previous_tag}..HEAD" --pretty=format:"- %s (%h)" > release-notes.md
+          fi
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -187,7 +201,7 @@ jobs:
           gh release create "$version" \
             --target "$GITHUB_SHA" \
             --title "Tuba $version" \
-            --notes "Release $version" \
+            --notes-file release-notes.md \
             release-artifacts/Tuba_${version}_Windows.zip \
             release-artifacts/Tuba_${version}_Linux.tar.gz \
             release-artifacts/Tuba_${version}_Android_arm32.apk \
