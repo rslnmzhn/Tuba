@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../debug_log.dart';
 
@@ -16,6 +17,11 @@ class DebugLogScreen extends StatelessWidget {
         title: const Text('Debug log'),
         actions: [
           TextButton.icon(
+            onPressed: () => _copyAll(context),
+            icon: const Icon(Icons.copy),
+            label: const Text('Копировать всё'),
+          ),
+          TextButton.icon(
             onPressed: _log.clear,
             icon: const Icon(Icons.delete_outline),
             label: const Text('Очистить'),
@@ -30,22 +36,31 @@ class DebugLogScreen extends StatelessWidget {
           if (entries.isEmpty) {
             return const Center(child: Text('Лог пуст'));
           }
-          return ListView.separated(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(12),
-            itemCount: entries.length,
-            separatorBuilder: (_, _) => const Divider(height: 12),
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              return SelectableText(
-                '[${entry.timeLabel}] ${entry.message}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-              );
-            },
+            child: SelectableText(
+              _formatEntries(entries),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            ),
           );
         },
       ),
     );
   }
+
+  Future<void> _copyAll(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: _formatEntries(_log.current)));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Debug log скопирован')));
+  }
+
+  String _formatEntries(List<DebugLogEntry> entries) => entries
+      .map((entry) => '[${entry.timeLabel}] ${entry.message}')
+      .join('\n');
 }

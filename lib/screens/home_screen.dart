@@ -8,6 +8,7 @@ import '../debug_log.dart';
 import '../discovered_devices.dart';
 import '../ffi/bridge.dart';
 import 'debug_log_screen.dart';
+import 'local_ip_card.dart';
 import 'viewer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -58,6 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _debugLog.add('Starting native services');
     final approvalResult = _bridge.startApprovalListener();
     _debugLog.add('startApprovalListener -> $approvalResult');
+    if (approvalResult != 0) {
+      _debugLog.add(
+        'Approval listener is unavailable. Incoming connections will reach '
+        'this device but cannot show an approval dialog.',
+      );
+    }
     final serverResult = _bridge.startServerAsync();
     _debugLog.add('startServerAsync -> $serverResult');
     final discoveryResult = _bridge.startDiscoveryResponder(deviceName: 'Tuba');
@@ -116,7 +123,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshDevices() async {
     _debugLog.add('Discovery refresh requested');
     final result = await _discoveredDevices.refresh();
-    _debugLog.add('Discovery refresh completed -> $result device event(s)');
+    final nativeError = result < 0 ? _bridge.lastError() : '';
+    _debugLog.add(
+      'Discovery refresh completed -> $result device event(s)'
+      '${nativeError.isEmpty ? '' : '; lastError="$nativeError"'}',
+    );
   }
 
   Future<void> _handleApprovalRequest(ApprovalRequest request) async {
@@ -391,48 +402,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'IP этого устройства',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Обновить IP',
-                            onPressed: _loadLocalAddresses,
-                            icon: const Icon(Icons.refresh),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      if (_localAddresses.isEmpty)
-                        const Text('IPv4 адреса не найдены')
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final address in _localAddresses)
-                              InputChip(
-                                avatar: const Icon(Icons.content_copy),
-                                label: Text(address.address),
-                                onPressed: () {
-                                  _controller.text = address.address;
-                                },
-                              ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
+              LocalIpCard(
+                addresses: _localAddresses,
+                onRefresh: _loadLocalAddresses,
+                onSelected: (address) => _controller.text = address,
               ),
               const SizedBox(height: 16),
               TextField(

@@ -14,7 +14,10 @@
 #include <utility>
 #include <vector>
 
-#if __has_include(<dart_api_dl.h>)
+#if __has_include("dart_api_dl.h")
+#include "dart_api_dl.h"
+#define RC_HAS_DART_API_DL 1
+#elif __has_include(<dart_api_dl.h>)
 #include <dart_api_dl.h>
 #define RC_HAS_DART_API_DL 1
 #else

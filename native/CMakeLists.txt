@@ -128,6 +128,8 @@ endif()
 target_include_directories(rc_native
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  PRIVATE
+    "${FLUTTER_ROOT}/bin/cache/dart-sdk/include"
 )
 
 target_compile_features(rc_native PRIVATE cxx_std_17)

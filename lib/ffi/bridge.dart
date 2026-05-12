@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import '../debug_log.dart';
 import 'native_lib.dart';
 
 const List<int> _defaultPsk = <int>[
@@ -188,8 +189,15 @@ final class RcBridge {
 
   int get abiVersion => _nativeAbiVersion();
 
-  int initializeDartApi() =>
-      _initializeDartApi(NativeApi.initializeApiDLData.cast<Void>());
+  int initializeDartApi() {
+    final result = _initializeDartApi(
+      NativeApi.initializeApiDLData.cast<Void>(),
+    );
+    if (result != 0) {
+      DebugLog.instance.add('rc_initialize_dart_api -> $result');
+    }
+    return result;
+  }
 
   int connect(String ipAddress, {int port = 0}) {
     return connectNamed(ipAddress, deviceName: 'Tuba client', port: port);
@@ -241,6 +249,10 @@ final class RcBridge {
   int startApprovalListener() {
     final initializeResult = initializeDartApi();
     if (initializeResult != 0) {
+      DebugLog.instance.add(
+        'startApprovalListener aborted: Dart DL init failed -> '
+        '$initializeResult',
+      );
       return initializeResult;
     }
     _approvalPort?.close();
@@ -266,6 +278,9 @@ final class RcBridge {
   int queryDiscovery({int port = 0, int timeoutMs = 800}) {
     final initializeResult = initializeDartApi();
     if (initializeResult != 0) {
+      DebugLog.instance.add(
+        'queryDiscovery aborted: Dart DL init failed -> $initializeResult',
+      );
       return initializeResult;
     }
     _discoveryPort?.close();
@@ -291,6 +306,9 @@ final class RcBridge {
   int startFrameStream() {
     final initializeResult = initializeDartApi();
     if (initializeResult != 0) {
+      DebugLog.instance.add(
+        'startFrameStream aborted: Dart DL init failed -> $initializeResult',
+      );
       return initializeResult;
     }
     _framePort?.close();
