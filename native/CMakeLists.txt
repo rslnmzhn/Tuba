@@ -22,11 +22,13 @@ else()
 endif()
 option(RC_NATIVE_ENABLE_CODEC "Build OpenH264/libyuv H264 encoder" ${RC_NATIVE_ENABLE_CODEC_DEFAULT})
 
+set(ENABLE_TESTING OFF CACHE BOOL "Disable dependency tests" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if(RC_NATIVE_USE_SYSTEM_MBEDTLS)
   find_package(MbedTLS REQUIRED)
 else()
   set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable mbedTLS programs" FORCE)
-  set(ENABLE_TESTING OFF CACHE BOOL "Disable mbedTLS tests" FORCE)
   set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "Disable mbedTLS fatal warnings" FORCE)
   set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "Disable mbedTLS install rules" FORCE)
   set(INSTALL_MBEDTLS_HEADERS OFF CACHE BOOL "Disable mbedTLS header install rules" FORCE)
@@ -34,12 +36,10 @@ else()
     mbedtls
     GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
     GIT_TAG v3.6.2
+    SOURCE_SUBDIR cmake-do-not-add
   )
-  FetchContent_GetProperties(mbedtls)
-  if(NOT mbedtls_POPULATED)
-    FetchContent_Populate(mbedtls)
-    add_subdirectory(${mbedtls_SOURCE_DIR} ${mbedtls_BINARY_DIR} EXCLUDE_FROM_ALL)
-  endif()
+  FetchContent_MakeAvailable(mbedtls)
+  add_subdirectory(${mbedtls_SOURCE_DIR} ${mbedtls_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 if(RC_NATIVE_ENABLE_CODEC)
@@ -48,22 +48,17 @@ if(RC_NATIVE_ENABLE_CODEC)
     GIT_REPOSITORY https://github.com/cisco/openh264.git
     GIT_TAG 8c7008aeb6335e7d36ab0d9a023a63f82a8eaac0
     GIT_SHALLOW TRUE
+    SOURCE_SUBDIR cmake-do-not-add
   )
-  FetchContent_GetProperties(openh264)
-  if(NOT openh264_POPULATED)
-    FetchContent_Populate(openh264)
-  endif()
+  FetchContent_MakeAvailable(openh264)
 
   FetchContent_Declare(
     libyuv
     GIT_REPOSITORY https://chromium.googlesource.com/libyuv/libyuv
-    GIT_TAG e23282704f3b731534167ee2c689bda574c49dca
-    GIT_SHALLOW TRUE
+    GIT_TAG eb6e7bb63738e29efd82ea3cf2a115238a89fa51
+    SOURCE_SUBDIR cmake-do-not-add
   )
-  FetchContent_GetProperties(libyuv)
-  if(NOT libyuv_POPULATED)
-    FetchContent_Populate(libyuv)
-  endif()
+  FetchContent_MakeAvailable(libyuv)
 
   file(GLOB_RECURSE OPENH264_SOURCES CONFIGURE_DEPENDS
     "${openh264_SOURCE_DIR}/codec/api/svc/*.cpp"
