@@ -18,6 +18,18 @@ format: dart format .
 - CMake target rc_native is integrated through Android, Linux, and Windows platform build files.
 - Codec layer must stay isolated from transport and Runtime ownership.
 
+## Project structure
+- `lib/ffi`: Dart FFI loading and bridge code; choose native library name/path by Platform.
+- `native/include/rc_api.h`: Public C-compatible native API declarations.
+- `native/src/rc_api.cpp`: Thin C ABI validation/delegation facade.
+- `native/src`: Runtime, transport, capture, codec, and native implementation internals.
+- `native/CMakeLists.txt`: Native rc_native target and dependency wiring.
+- `android`, `linux`, `windows`: Flutter platform integration that wires the native CMake target.
+- `/skills`, `/docs/build`, `/docs/context`, `/docs/deadcode`, `/docs/deps`, `/docs/security`: Local agent artifacts only; keep out of tracked git history.
+
+## Code conventions
+- Generated agent reports and downloaded skills are local artifacts; do not commit them.
+
 ## Agent registry
 | agent | mode | role |
 |-------|------|------|
@@ -27,7 +39,7 @@ format: dart format .
 | terminal-runner   | subagent | safe command execution |
 | test-runner       | subagent | test execution and structured reporting |
 | quick-reviewer    | subagent | anti-pattern review, 3-attempt loop |
-| skill-finder      | subagent | match tasks to available skills |
+| skill-finder      | subagent | remote skill search and local install into ./skills |
 | agents-keeper     | subagent | AGENTS.md maintenance |
 | dead-code-scanner | subagent | unused exports and functions |
 | security-scanner  | subagent | secrets and unsafe patterns |
@@ -51,16 +63,9 @@ format: dart format .
 - NativePort frame delivery must initialize Dart DL via rc_initialize_dart_api(NativeApi.initializeApiDLData) before rc_frame_stream_start.
 - HomeScreen must not own connection history persistence; use the ConnectionHistory service.
 - RcBridge/Runtime are growing seams and should be split if more FFI domains are added.
+- Generated agent context/build/deadcode/deps/security reports and downloaded skills are local artifacts and should stay out of tracked git history.
 - Verified commands: dart format ., flutter analyze, flutter build windows, flutter clean && flutter build apk, flutter test.
 
 ## Blocked items
 (items that require human decision before automated work can proceed)
 - flutter build linux is unsupported on the current Windows host.
-
-## Changelog
-- 2026-05-12: Documented Flutter UI-to-native FFI bridge, NativePort frame stream initialization, connection history ownership, and bridge/runtime seam warning.
-- 2026-05-12: Documented step 2 codec abstraction, H264 dependency wiring, and Android codec cache-clean note.
-- 2026-05-12: Documented step 1 capture scaffold ownership and platform file selection after Windows DXGI/stub capture implementation.
-- 2026-05-12: Updated Runtime ownership and rc_api.cpp delegation/include patterns after orchestration refactor passed review.
-- 2026-05-12: Documented transport scaffold ownership rule after review found rc_api.cpp still owning orchestration.
-- 2026-05-11: Created AGENTS.md documenting Flutter/C++ FFI scaffold, native build ownership, and verified commands.

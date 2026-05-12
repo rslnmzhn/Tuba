@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local agent/repository hygiene reports
+/skills/
+/docs/build/
+/docs/context/
+/docs/deadcode/
+/docs/deps/
+/docs/security/
