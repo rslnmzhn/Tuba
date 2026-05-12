@@ -110,9 +110,9 @@ jobs:
           mkdir -p android-artifacts
           printf '%s\n' "$manifest" > android-artifacts/update_manifest.json
 
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "android-artifacts/Tuba_${version}_Android_arm32.apk"
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "android-artifacts/Tuba_${version}_Android_arm64.apk"
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "android-artifacts/Tuba_${version}_Android_x86_64.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "android-artifacts/Tuba_${version}_armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "android-artifacts/Tuba_${version}_arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "android-artifacts/Tuba_${version}_x86_64.apk"
 
       - name: Upload Android APK artifacts
         uses: actions/upload-artifact@v4
@@ -152,9 +152,9 @@ jobs:
           expected_files=(
             "Tuba_${version}_Windows.zip"
             "Tuba_${version}_Linux.tar.gz"
-            "Tuba_${version}_Android_arm32.apk"
-            "Tuba_${version}_Android_arm64.apk"
-            "Tuba_${version}_Android_x86_64.apk"
+            "Tuba_${version}_armeabi-v7a.apk"
+            "Tuba_${version}_arm64-v8a.apk"
+            "Tuba_${version}_x86_64.apk"
           )
 
           actual_count="$(find release-artifacts -maxdepth 1 -type f | wc -l | tr -d ' ')"
@@ -204,6 +204,6 @@ jobs:
             --notes-file release-notes.md \
             release-artifacts/Tuba_${version}_Windows.zip \
             release-artifacts/Tuba_${version}_Linux.tar.gz \
-            release-artifacts/Tuba_${version}_Android_arm32.apk \
-            release-artifacts/Tuba_${version}_Android_arm64.apk \
-            release-artifacts/Tuba_${version}_Android_x86_64.apk
+            release-artifacts/Tuba_${version}_armeabi-v7a.apk \
+            release-artifacts/Tuba_${version}_arm64-v8a.apk \
+            release-artifacts/Tuba_${version}_x86_64.apk
