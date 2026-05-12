@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../debug_log.dart';
 import '../ffi/bridge.dart';
 import '../input_forwarder.dart';
 
@@ -24,8 +25,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   @override
   void initState() {
     super.initState();
+    DebugLog.instance.add('Viewer opened: ip=${widget.ipAddress}');
     _subscription = _bridge.frames.listen(_updateFrame);
     final result = _bridge.startFrameStream();
+    DebugLog.instance.add('startFrameStream -> $result');
     if (result != 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -40,6 +43,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   @override
   void dispose() {
+    DebugLog.instance.add('Viewer disposed: ip=${widget.ipAddress}');
     _subscription?.cancel();
     _image?.dispose();
     super.dispose();
@@ -69,7 +73,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
   }
 
   void _disconnect() {
-    _bridge.disconnect();
+    DebugLog.instance.add('Disconnect requested from viewer');
+    final result = _bridge.disconnect();
+    DebugLog.instance.add('disconnect -> $result');
     if (mounted) {
       Navigator.of(context).pop();
     }

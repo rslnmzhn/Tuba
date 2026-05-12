@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../connection_history.dart';
+import '../debug_log.dart';
 import '../discovered_devices.dart';
 import '../ffi/bridge.dart';
+import 'debug_log_screen.dart';
 import 'viewer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ConnectionHistory _connectionHistory = ConnectionHistory.instance;
   late final DiscoveredDevices _discoveredDevices;
   RcBridge get _bridge => RcBridge.instance;
+  DebugLog get _debugLog => DebugLog.instance;
   List<String> _history = <String>[];
   List<InternetAddress> _localAddresses = <InternetAddress>[];
   bool _connecting = false;
@@ -52,9 +55,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _startNativeServices() {
+    _debugLog.add('Starting native services');
     final approvalResult = _bridge.startApprovalListener();
+    _debugLog.add('startApprovalListener -> $approvalResult');
     final serverResult = _bridge.startServerAsync();
+    _debugLog.add('startServerAsync -> $serverResult');
     final discoveryResult = _bridge.startDiscoveryResponder(deviceName: 'Tuba');
+    _debugLog.add('startDiscoveryResponder -> $discoveryResult');
     _approvalSubscription = _bridge.approvalRequests.listen(
       _handleApprovalRequest,
     );
@@ -87,10 +94,15 @@ class _HomeScreenState extends State<HomeScreen> {
       errors.add('discovery: $discoveryResult');
     }
     if (errors.isEmpty) {
+      _debugLog.add('Native services started successfully');
       return;
     }
 
     final nativeError = _bridge.lastError();
+    _debugLog.add(
+      'Native service startup failed: ${errors.join(', ')}; '
+      'lastError="$nativeError"',
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -102,11 +114,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshDevices() async {
-    await _discoveredDevices.refresh();
+    _debugLog.add('Discovery refresh requested');
+    final result = await _discoveredDevices.refresh();
+    _debugLog.add('Discovery refresh completed -> $result device event(s)');
   }
 
   Future<void> _handleApprovalRequest(ApprovalRequest request) async {
+    _debugLog.add(
+      'Approval request received: id=${request.id}, '
+      'device="${request.deviceName}", ip=${request.ipAddress}',
+    );
     if (!mounted) {
+      _debugLog.add(
+        'Approval request ${request.id} rejected: HomeScreen unmounted',
+      );
       _bridge.rejectRequest(request.id);
       return;
     }
@@ -131,9 +152,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (approved == true) {
-      _bridge.approveRequest(request.id);
+      final result = _bridge.approveRequest(request.id);
+      _debugLog.add('Approval request ${request.id} approved -> $result');
     } else {
-      _bridge.rejectRequest(request.id);
+      final result = _bridge.rejectRequest(request.id);
+      _debugLog.add('Approval request ${request.id} rejected -> $result');
     }
   }
 
@@ -156,6 +179,10 @@ class _HomeScreenState extends State<HomeScreen> {
         .expand((interface) => interface.addresses)
         .where((address) => !_isLinkLocalAddress(address.address))
         .toList(growable: false);
+    _debugLog.add(
+      'Loaded local IPv4 addresses: '
+      '${addresses.map((address) => address.address).join(', ')}',
+    );
     if (!mounted) {
       return;
     }
@@ -176,8 +203,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _connect([String? selectedIp]) async {
     final ipAddress = (selectedIp ?? _controller.text).trim();
     if (ipAddress.isEmpty || _connecting) {
+      _debugLog.add(
+        ipAddress.isEmpty
+            ? 'Connect ignored: empty IP address'
+            : 'Connect ignored: connection already in progress',
+      );
       return;
     }
+
+    _debugLog.add('Connect requested: ip=$ipAddress');
 
     setState(() {
       _connecting = true;
@@ -186,6 +220,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final result = await Future<int>(
       () => _bridge.connectNamed(ipAddress, deviceName: 'Tuba client'),
+    );
+    final nativeError = result == 0 ? '' : _bridge.lastError();
+    _debugLog.add(
+      'connectNamed($ipAddress) -> $result'
+      '${nativeError.isEmpty ? '' : '; lastError="$nativeError"'}',
     );
     if (!mounted) {
       return;
@@ -197,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     if (result != 0) {
-      final message = _connectErrorMessage(result, _bridge.lastError());
+      final message = _connectErrorMessage(result, nativeError);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -205,6 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     await _saveHistory(ipAddress);
+    _debugLog.add('Connection succeeded: ip=$ipAddress');
 
     if (!mounted) {
       return;
@@ -213,6 +253,12 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute<void>(
         builder: (context) => ViewerScreen(ipAddress: ipAddress),
       ),
+    );
+  }
+
+  void _openDebugLog() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (context) => const DebugLogScreen()),
     );
   }
 
@@ -253,7 +299,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tuba')),
+      appBar: AppBar(
+        title: const Text('Tuba'),
+        actions: [
+          IconButton(
+            tooltip: 'Debug log',
+            onPressed: _openDebugLog,
+            icon: const Icon(Icons.bug_report_outlined),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
