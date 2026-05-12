@@ -2,14 +2,28 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #if !defined(_WIN32)
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#else
+#include <ws2tcpip.h>
 #endif
 
 namespace rc::transport {
+namespace {
+
+thread_local std::string g_last_tcp_error;
+
+void set_tcp_error(const char* operation, int error_code) {
+  g_last_tcp_error = operation;
+  g_last_tcp_error += " failed: ";
+  g_last_tcp_error += socket_error_message(error_code);
+}
+
+}  // namespace
 
 TcpTransport::TcpTransport() : socket_handle_(kInvalidSocket) {}
 
@@ -37,6 +51,7 @@ TcpTransport& TcpTransport::operator=(TcpTransport&& other) noexcept {
 bool TcpTransport::connect(const char* host, uint16_t port) {
   disconnect();
   if (host == nullptr || !initialize_sockets()) {
+    g_last_tcp_error = "socket initialization failed";
     return false;
   }
 
@@ -49,7 +64,9 @@ bool TcpTransport::connect(const char* host, uint16_t port) {
   std::snprintf(port_text, sizeof(port_text), "%u", static_cast<unsigned>(port));
 
   addrinfo* result = nullptr;
-  if (getaddrinfo(host, port_text, &hints, &result) != 0) {
+  const int resolve_result = getaddrinfo(host, port_text, &hints, &result);
+  if (resolve_result != 0) {
+    g_last_tcp_error = "getaddrinfo failed";
     return false;
   }
 
@@ -58,14 +75,17 @@ bool TcpTransport::connect(const char* host, uint16_t port) {
     rc_socket_t candidate = socket(item->ai_family, item->ai_socktype,
                                    item->ai_protocol);
     if (candidate == kInvalidSocket) {
+      set_tcp_error("socket", last_socket_error());
       continue;
     }
     if (::connect(candidate, item->ai_addr,
                   static_cast<int>(item->ai_addrlen)) == 0) {
       socket_handle_ = candidate;
       connected = true;
+      g_last_tcp_error.clear();
       break;
     }
+    set_tcp_error("connect", last_socket_error());
     close_socket(candidate);
   }
 
@@ -100,13 +120,36 @@ rc_socket_t TcpTransport::socket_handle() const {
   return socket_handle_;
 }
 
+std::string TcpTransport::peer_address() const {
+  if (socket_handle_ == kInvalidSocket) {
+    return {};
+  }
+  sockaddr_storage address{};
+  socklen_t address_length = sizeof(address);
+  if (getpeername(socket_handle_, reinterpret_cast<sockaddr*>(&address),
+                  &address_length) != 0) {
+    return {};
+  }
+  char text[INET6_ADDRSTRLEN]{};
+  if (address.ss_family == AF_INET) {
+    const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(&address);
+    inet_ntop(AF_INET, &ipv4->sin_addr, text, sizeof(text));
+  } else if (address.ss_family == AF_INET6) {
+    const auto* ipv6 = reinterpret_cast<const sockaddr_in6*>(&address);
+    inet_ntop(AF_INET6, &ipv6->sin6_addr, text, sizeof(text));
+  }
+  return text;
+}
+
 rc_socket_t TcpTransport::listen_on(uint16_t port, int backlog) {
   if (!initialize_sockets()) {
+    g_last_tcp_error = "socket initialization failed";
     return kInvalidSocket;
   }
 
   rc_socket_t listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (listener == kInvalidSocket) {
+    set_tcp_error("socket", last_socket_error());
     return kInvalidSocket;
   }
 
@@ -120,6 +163,7 @@ rc_socket_t TcpTransport::listen_on(uint16_t port, int backlog) {
   if (bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) !=
           0 ||
       listen(listener, backlog) != 0) {
+    set_tcp_error("bind/listen", last_socket_error());
     close_socket(listener);
     return kInvalidSocket;
   }
@@ -135,7 +179,14 @@ TcpTransport TcpTransport::accept_from(rc_socket_t listener) {
   socklen_t address_length = sizeof(address);
   rc_socket_t accepted = accept(listener, reinterpret_cast<sockaddr*>(&address),
                                 &address_length);
+  if (accepted == kInvalidSocket) {
+    set_tcp_error("accept", last_socket_error());
+  }
   return TcpTransport(accepted);
+}
+
+const char* last_tcp_error() {
+  return g_last_tcp_error.c_str();
 }
 
 }  // namespace rc::transport

@@ -1,5 +1,13 @@
 #include "socket_platform.h"
 
+#include <array>
+#include <cstdio>
+#include <cstring>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #if !defined(_WIN32)
 #include <cerrno>
 #include <unistd.h>
@@ -66,6 +74,32 @@ bool socket_would_block() {
 #else
   return errno == EAGAIN || errno == EWOULDBLOCK;
 #endif
+}
+
+int last_socket_error() {
+#if defined(_WIN32)
+  return WSAGetLastError();
+#else
+  return errno;
+#endif
+}
+
+const char* socket_error_message(int error_code) {
+  static thread_local std::array<char, 256> buffer{};
+#if defined(_WIN32)
+  const DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
+  const DWORD length = FormatMessageA(
+      flags, nullptr, static_cast<DWORD>(error_code),
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer.data(),
+      static_cast<DWORD>(buffer.size()), nullptr);
+  if (length == 0U) {
+    std::snprintf(buffer.data(), buffer.size(), "socket error %d", error_code);
+  }
+#else
+  const char* message = std::strerror(error_code);
+  std::snprintf(buffer.data(), buffer.size(), "%s", message != nullptr ? message : "unknown socket error");
+#endif
+  return buffer.data();
 }
 
 }  // namespace rc::transport

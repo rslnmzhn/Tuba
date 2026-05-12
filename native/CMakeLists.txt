@@ -98,6 +98,8 @@ if(RC_NATIVE_ENABLE_CODEC)
 endif()
 
 add_library(rc_native SHARED
+  src/approval_protocol.cpp
+  src/dart_port_events.cpp
   src/rc_api.cpp
   src/rc_runtime.cpp
   src/socket_platform.cpp

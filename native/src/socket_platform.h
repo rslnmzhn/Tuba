@@ -27,6 +27,8 @@ bool set_reuse_addr(rc_socket_t socket_handle);
 bool set_broadcast(rc_socket_t socket_handle);
 bool set_recv_timeout(rc_socket_t socket_handle, uint32_t timeout_ms);
 bool socket_would_block();
+int last_socket_error();
+const char* socket_error_message(int error_code);
 
 }  // namespace rc::transport
 

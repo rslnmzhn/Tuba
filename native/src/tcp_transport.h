@@ -4,6 +4,8 @@
 #include "socket_platform.h"
 #include "transport.h"
 
+#include <string>
+
 namespace rc::transport {
 
 class TcpTransport final : public ITransport {
@@ -23,6 +25,7 @@ class TcpTransport final : public ITransport {
   void disconnect() override;
 
   rc_socket_t socket_handle() const;
+  std::string peer_address() const;
 
   static rc_socket_t listen_on(uint16_t port, int backlog);
   static TcpTransport accept_from(rc_socket_t listener);
@@ -30,6 +33,8 @@ class TcpTransport final : public ITransport {
  private:
   rc_socket_t socket_handle_;
 };
+
+const char* last_tcp_error();
 
 }  // namespace rc::transport
 

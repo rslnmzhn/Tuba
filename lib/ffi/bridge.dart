@@ -33,6 +33,30 @@ final class NativeFrame {
   final Uint8List rgba;
 }
 
+final class DiscoveredDevice {
+  const DiscoveredDevice({
+    required this.name,
+    required this.ipAddress,
+    required this.tcpPort,
+  });
+
+  final String name;
+  final String ipAddress;
+  final int tcpPort;
+}
+
+final class ApprovalRequest {
+  const ApprovalRequest({
+    required this.id,
+    required this.deviceName,
+    required this.ipAddress,
+  });
+
+  final int id;
+  final String deviceName;
+  final String ipAddress;
+}
+
 final class RcBridge {
   RcBridge._() : _library = NativeLib.instance {
     _nativeAbiVersion = _library
@@ -44,14 +68,51 @@ final class RcBridge {
           Int32 Function(Pointer<Void>),
           int Function(Pointer<Void>)
         >('rc_initialize_dart_api');
-    _clientConnect = _library
+    _clientConnectNamed = _library
         .lookupFunction<
-          Int32 Function(Pointer<Utf8>, Uint16, Pointer<Uint8>, Uint32),
-          int Function(Pointer<Utf8>, int, Pointer<Uint8>, int)
-        >('rc_client_connect');
+          Int32 Function(
+            Pointer<Utf8>,
+            Uint16,
+            Pointer<Uint8>,
+            Uint32,
+            Pointer<Utf8>,
+          ),
+          int Function(Pointer<Utf8>, int, Pointer<Uint8>, int, Pointer<Utf8>)
+        >('rc_client_connect_named');
     _clientDisconnect = _library
         .lookupFunction<Int32 Function(), int Function()>(
           'rc_client_disconnect',
+        );
+    _serverStart = _library
+        .lookupFunction<
+          Int32 Function(Uint16, Pointer<Uint8>, Uint32),
+          int Function(int, Pointer<Uint8>, int)
+        >('rc_server_start');
+    _serverSetApprovalPort = _library
+        .lookupFunction<Int32 Function(Int64), int Function(int)>(
+          'rc_server_set_approval_port',
+        );
+    _serverApprovePending = _library
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+          'rc_server_approve_pending',
+        );
+    _serverRejectPending = _library
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+          'rc_server_reject_pending',
+        );
+    _discoveryStart = _library
+        .lookupFunction<
+          Int32 Function(Uint16, Pointer<Utf8>),
+          int Function(int, Pointer<Utf8>)
+        >('rc_discovery_start');
+    _discoveryQuery = _library
+        .lookupFunction<
+          Int32 Function(Int64, Uint16, Uint32),
+          int Function(int, int, int)
+        >('rc_discovery_query');
+    _lastError = _library
+        .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+          'rc_last_error',
         );
     _frameStreamStart = _library
         .lookupFunction<Int32 Function(Int64), int Function(int)>(
@@ -83,9 +144,22 @@ final class RcBridge {
   final DynamicLibrary _library;
   late final int Function() _nativeAbiVersion;
   late final int Function(Pointer<Void>) _initializeDartApi;
-  late final int Function(Pointer<Utf8>, int, Pointer<Uint8>, int)
-  _clientConnect;
+  late final int Function(
+    Pointer<Utf8>,
+    int,
+    Pointer<Uint8>,
+    int,
+    Pointer<Utf8>,
+  )
+  _clientConnectNamed;
   late final int Function() _clientDisconnect;
+  late final int Function(int, Pointer<Uint8>, int) _serverStart;
+  late final int Function(int) _serverSetApprovalPort;
+  late final int Function(int) _serverApprovePending;
+  late final int Function(int) _serverRejectPending;
+  late final int Function(int, Pointer<Utf8>) _discoveryStart;
+  late final int Function(int, int, int) _discoveryQuery;
+  late final Pointer<Utf8> Function() _lastError;
   late final int Function(int) _frameStreamStart;
   late final int Function() _frameStreamStop;
   late final int Function(double, double) _sendMouseMove;
@@ -94,9 +168,17 @@ final class RcBridge {
 
   final StreamController<NativeFrame> _frames =
       StreamController<NativeFrame>.broadcast();
+  final StreamController<DiscoveredDevice> _devices =
+      StreamController<DiscoveredDevice>.broadcast();
+  final StreamController<ApprovalRequest> _approvalRequests =
+      StreamController<ApprovalRequest>.broadcast();
   ReceivePort? _framePort;
+  ReceivePort? _discoveryPort;
+  ReceivePort? _approvalPort;
 
   Stream<NativeFrame> get frames => _frames.stream;
+  Stream<DiscoveredDevice> get devices => _devices.stream;
+  Stream<ApprovalRequest> get approvalRequests => _approvalRequests.stream;
 
   int get abiVersion => _nativeAbiVersion();
 
@@ -104,17 +186,84 @@ final class RcBridge {
       _initializeDartApi(NativeApi.initializeApiDLData.cast<Void>());
 
   int connect(String ipAddress, {int port = 0}) {
+    return connectNamed(ipAddress, deviceName: 'Tuba client', port: port);
+  }
+
+  int connectNamed(
+    String ipAddress, {
+    required String deviceName,
+    int port = 0,
+  }) {
     final address = ipAddress.toNativeUtf8();
+    final name = deviceName.toNativeUtf8();
     final psk = calloc<Uint8>(_defaultPsk.length);
     try {
       for (var index = 0; index < _defaultPsk.length; index += 1) {
         psk[index] = _defaultPsk[index];
       }
-      return _clientConnect(address, port, psk, _defaultPsk.length);
+      return _clientConnectNamed(address, port, psk, _defaultPsk.length, name);
     } finally {
       calloc.free(psk);
+      calloc.free(name);
       calloc.free(address);
     }
+  }
+
+  int startServer({int port = 0}) {
+    final psk = calloc<Uint8>(_defaultPsk.length);
+    try {
+      for (var index = 0; index < _defaultPsk.length; index += 1) {
+        psk[index] = _defaultPsk[index];
+      }
+      return _serverStart(port, psk, _defaultPsk.length);
+    } finally {
+      calloc.free(psk);
+    }
+  }
+
+  int startApprovalListener() {
+    final initializeResult = initializeDartApi();
+    if (initializeResult != 0) {
+      return initializeResult;
+    }
+    _approvalPort?.close();
+    final port = ReceivePort('rc_approval_requests');
+    _approvalPort = port;
+    port.listen(_handleApprovalMessage);
+    return _serverSetApprovalPort(port.sendPort.nativePort);
+  }
+
+  int approveRequest(int requestId) => _serverApprovePending(requestId);
+
+  int rejectRequest(int requestId) => _serverRejectPending(requestId);
+
+  int startDiscoveryResponder({int port = 0, String deviceName = 'Tuba'}) {
+    final name = deviceName.toNativeUtf8();
+    try {
+      return _discoveryStart(port, name);
+    } finally {
+      calloc.free(name);
+    }
+  }
+
+  int queryDiscovery({int port = 0, int timeoutMs = 800}) {
+    final initializeResult = initializeDartApi();
+    if (initializeResult != 0) {
+      return initializeResult;
+    }
+    _discoveryPort?.close();
+    final receivePort = ReceivePort('rc_discovery');
+    _discoveryPort = receivePort;
+    receivePort.listen(_handleDiscoveryMessage);
+    return _discoveryQuery(receivePort.sendPort.nativePort, port, timeoutMs);
+  }
+
+  String lastError() {
+    final message = _lastError();
+    if (message == nullptr) {
+      return '';
+    }
+    return message.toDartString();
   }
 
   int disconnect() {
@@ -138,6 +287,42 @@ final class RcBridge {
     _frameStreamStop();
     _framePort?.close();
     _framePort = null;
+  }
+
+  void _handleDiscoveryMessage(Object? message) {
+    if (message is! List<Object?> || message.length != 4) {
+      return;
+    }
+    if (message[0] != 'device') {
+      return;
+    }
+    final name = message[1];
+    final ipAddress = message[2];
+    final tcpPort = message[3];
+    if (name is! String || ipAddress is! String || tcpPort is! int) {
+      return;
+    }
+    _devices.add(
+      DiscoveredDevice(name: name, ipAddress: ipAddress, tcpPort: tcpPort),
+    );
+  }
+
+  void _handleApprovalMessage(Object? message) {
+    if (message is! List<Object?> || message.length != 4) {
+      return;
+    }
+    if (message[0] != 'approval_request') {
+      return;
+    }
+    final id = message[1];
+    final deviceName = message[2];
+    final ipAddress = message[3];
+    if (id is! int || deviceName is! String || ipAddress is! String) {
+      return;
+    }
+    _approvalRequests.add(
+      ApprovalRequest(id: id, deviceName: deviceName, ipAddress: ipAddress),
+    );
   }
 
   int sendMouseMove(double x, double y) => _sendMouseMove(x, y);
