@@ -1,0 +1,65 @@
+name: Version
+
+on:
+  workflow_call:
+    outputs:
+      new_version:
+        description: Next release version.
+        value: ${{ jobs.version.outputs.new_version }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Calculate next version
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next version
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          last_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+
+          if [[ -z "$last_tag" ]]; then
+            new_version="0.1.0"
+          else
+            IFS='.' read -r major minor patch <<< "$last_tag"
+
+            if [[ ! "$major" =~ ^[0-9]+$ || ! "$minor" =~ ^[0-9]+$ || ! "$patch" =~ ^[0-9]+$ ]]; then
+              echo "Last tag '$last_tag' is not in x.y.z format" >&2
+              exit 1
+            fi
+
+            patch=$((patch + 1))
+
+            if (( patch == 10 )); then
+              patch=0
+              minor=$((minor + 1))
+            fi
+
+            if (( minor == 10 )); then
+              minor=0
+              major=$((major + 1))
+            fi
+
+            new_version="${major}.${minor}.${patch}"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/$new_version" >/dev/null; then
+            echo "Calculated version '$new_version' already exists" >&2
+            exit 1
+          fi
+
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "Next version: $new_version"
