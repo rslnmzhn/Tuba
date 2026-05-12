@@ -1,0 +1,195 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Calculate version
+    uses: ./.github/workflows/_version.yml
+
+  desktop:
+    name: Build ${{ matrix.platform.name }}
+    needs: version
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Windows
+            runner: windows-latest
+            build-command: flutter build windows --release
+            build-path: build/windows/x64/runner/Release
+            archive-name: Tuba_${{ needs.version.outputs.new_version }}_Windows.zip
+          - name: Linux
+            runner: ubuntu-latest
+            build-command: flutter build linux --release
+            build-path: build/linux/x64/release/bundle
+            archive-name: Tuba_${{ needs.version.outputs.new_version }}_Linux.tar.gz
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake git ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build ${{ matrix.platform.name }}
+        run: ${{ matrix.platform.build-command }}
+
+      - name: Prepare package directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p package/Tuba
+          cp -R "${{ matrix.platform.build-path }}/." package/Tuba/
+          printf '{"version":"%s","url":"","changelog":""}\n' "${{ needs.version.outputs.new_version }}" > package/Tuba/update_manifest.json
+
+      - name: Create Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "package/Tuba" -DestinationPath "${{ matrix.platform.archive-name }}" -Force
+
+      - name: Create Linux archive
+        if: runner.os == 'Linux'
+        shell: bash
+        run: tar -czf "${{ matrix.platform.archive-name }}" -C package Tuba
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform.archive-name }}
+          path: ${{ matrix.platform.archive-name }}
+          if-no-files-found: error
+
+  android:
+    name: Build Android
+    needs: version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Android split APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Prepare Android artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ needs.version.outputs.new_version }}"
+          manifest='{"version":"'"$version"'","url":"","changelog":""}'
+
+          mkdir -p android-artifacts
+          printf '%s\n' "$manifest" > android-artifacts/update_manifest.json
+
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "android-artifacts/Tuba_${version}_Android_arm32.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "android-artifacts/Tuba_${version}_Android_arm64.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "android-artifacts/Tuba_${version}_Android_x86_64.apk"
+
+      - name: Upload Android APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tuba_${{ needs.version.outputs.new_version }}_Android_APKs
+          path: android-artifacts/*.apk
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - version
+      - desktop
+      - android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Validate release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ needs.version.outputs.new_version }}"
+          expected_files=(
+            "Tuba_${version}_Windows.zip"
+            "Tuba_${version}_Linux.tar.gz"
+            "Tuba_${version}_Android_arm32.apk"
+            "Tuba_${version}_Android_arm64.apk"
+            "Tuba_${version}_Android_x86_64.apk"
+          )
+
+          actual_count="$(find release-artifacts -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [[ "$actual_count" != "5" ]]; then
+            echo "Expected exactly 5 release files, found $actual_count" >&2
+            find release-artifacts -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+
+          for file in "${expected_files[@]}"; do
+            if [[ ! -f "release-artifacts/$file" ]]; then
+              echo "Missing release artifact: $file" >&2
+              exit 1
+            fi
+          done
+
+          if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+            echo "Tag '$version' already exists" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ needs.version.outputs.new_version }}"
+          gh release create "$version" \
+            --target "$GITHUB_SHA" \
+            --title "Tuba $version" \
+            --notes "Release $version" \
+            release-artifacts/Tuba_${version}_Windows.zip \
+            release-artifacts/Tuba_${version}_Linux.tar.gz \
+            release-artifacts/Tuba_${version}_Android_arm32.apk \
+            release-artifacts/Tuba_${version}_Android_arm64.apk \
+            release-artifacts/Tuba_${version}_Android_x86_64.apk
